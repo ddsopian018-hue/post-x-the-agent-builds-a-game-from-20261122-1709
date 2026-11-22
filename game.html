@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEON DODGE — built from one prompt</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b0714; overflow: hidden; }
+  #game { display: block; margin: 0 auto; background: #0b0714; touch-action: none; }
+  #hint {
+    position: fixed; left: 0; right: 0; bottom: 14px; text-align: center;
+    color: #8f86a8; font: 14px/1.4 system-ui, sans-serif; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="720" height="960"></canvas>
+<div id="hint">← → or drag to move &nbsp;·&nbsp; dodge the meteors &nbsp;·&nbsp; R to restart</div>
+<script>
+  // NEON DODGE — a tiny arcade game.
+  // Move the ship, dodge the falling meteors. Survive: +1 point a second.
+  // Every 10 seconds the meteors fall faster. One hit ends the run.
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const ship = { x: W / 2, y: H - 90, r: 22, speed: 9 };
+  let meteors = [];
+  let score = 0, best = 0;
+  let speed = 2.6, spawnEvery = 34, frame = 0;
+  let over = false, started = false;
+  const keys = {};
+
+  function spawnMeteor() {
+    const r = 14 + Math.random() * 26;
+    meteors.push({
+      x: r + Math.random() * (W - 2 * r),
+      y: -r,
+      r: r,
+      vy: speed * (0.8 + Math.random() * 0.5),
+      vx: (Math.random() - 0.5) * 1.4,
+      spin: (Math.random() - 0.5) * 0.08,
+      a: Math.random() * Math.PI * 2,
+      hue: 280 + Math.random() * 60
+    });
+  }
+
+  function reset() {
+    meteors = [];
+    score = 0; speed = 2.6; spawnEvery = 34; frame = 0;
+    ship.x = W / 2; over = false; started = true;
+  }
+
+  function drawShip() {
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 22;
+    ctx.fillStyle = '#00f0ff';
+    ctx.beginPath();
+    ctx.moveTo(0, -26); ctx.lineTo(20, 18); ctx.lineTo(0, 8); ctx.lineTo(-20, 18);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // engine flame
+    ctx.save();
+    ctx.translate(ship.x, ship.y + 16);
+    ctx.fillStyle = '#ff9d00';
+    ctx.beginPath();
+    ctx.moveTo(-7, 0); ctx.lineTo(0, 16 + Math.random() * 10); ctx.lineTo(7, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMeteor(m) {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.a);
+    ctx.shadowColor = `hsl(${m.hue} 100% 60%)`; ctx.shadowBlur = 16;
+    ctx.fillStyle = `hsl(${m.hue} 90% 55%)`;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      const rr = m.r * (i % 2 === 0 ? 1 : 0.72);
+      ctx[i === 0 ? 'moveTo' : 'lineTo'](Math.cos(ang) * rr, Math.sin(ang) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+
+    // starfield
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 70; i++) {
+      const sx = (i * 137.5) % W, sy = (i * 89.3 + frame * 0.6) % H;
+      ctx.globalAlpha = 0.25 + ((i * 7) % 10) / 18;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    if (!started) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 54px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('NEON DODGE', W / 2, H / 2 - 40);
+      ctx.fillStyle = '#00f0ff';
+      ctx.font = '24px system-ui, sans-serif';
+      ctx.fillText('one prompt. one game.', W / 2, H / 2 + 8);
+      ctx.fillStyle = '#8f86a8';
+      ctx.font = '20px system-ui, sans-serif';
+      ctx.fillText('press any key or tap to start', W / 2, H / 2 + 60);
+      requestAnimationFrame(tick);
+      return;
+    }
+
+    if (!over) {
+      frame++;
+      if (frame % 60 === 0) score++;
+      if (frame % 600 === 0) { speed += 0.7; spawnEvery = Math.max(16, spawnEvery - 4); }
+      if (frame % spawnEvery === 0) spawnMeteor();
+
+      if (keys.ArrowLeft || keys.a) ship.x -= ship.speed;
+      if (keys.ArrowRight || keys.d) ship.x += ship.speed;
+      ship.x = Math.max(ship.r, Math.min(W - ship.r, ship.x));
+
+      for (const m of meteors) {
+        m.y += m.vy; m.x += m.vx; m.a += m.spin;
+        if (m.x < m.r || m.x > W - m.r) m.vx *= -1;
+      }
+      meteors = meteors.filter(m => m.y - m.r < H + 40);
+
+      for (const m of meteors) {
+        const dx = m.x - ship.x, dy = m.y - ship.y;
+        if (dx * dx + dy * dy < (m.r * 0.8 + ship.r * 0.8) ** 2) { over = true; best = Math.max(best, score); }
+      }
+    }
+
+    for (const m of meteors) drawMeteor(m);
+    drawShip();
+
+    // HUD
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 34px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('SCORE ' + score, 24, 52);
+    ctx.fillStyle = '#8f86a8';
+    ctx.font = '20px system-ui, sans-serif';
+    ctx.fillText('BEST ' + best, 24, 84);
+    ctx.fillStyle = '#ff2e88';
+    ctx.textAlign = 'right';
+    ctx.fillText('SPEED x' + (speed / 2.6).toFixed(1), W - 24, 52);
+
+    if (over) {
+      ctx.fillStyle = 'rgba(11,7,20,0.72)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#ff2e88';
+      ctx.font = 'bold 58px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('GAME OVER', W / 2, H / 2 - 20);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '30px system-ui, sans-serif';
+      ctx.fillText('score ' + score + '  ·  best ' + best, W / 2, H / 2 + 30);
+      ctx.fillStyle = '#00f0ff';
+      ctx.font = '22px system-ui, sans-serif';
+      ctx.fillText('press R to play again', W / 2, H / 2 + 78);
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  window.addEventListener('keydown', e => {
+    keys[e.key] = true;
+    if (!started) reset();
+    if (e.key === 'r' || e.key === 'R') reset();
+  });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
+  canvas.addEventListener('pointermove', e => {
+    const rect = canvas.getBoundingClientRect();
+    ship.x = (e.clientX - rect.left) * (W / rect.width);
+    if (!started) reset();
+  });
+  canvas.addEventListener('pointerdown', () => { if (!started) reset(); });
+
+  tick();
+</script>
+</body>
+</html>
