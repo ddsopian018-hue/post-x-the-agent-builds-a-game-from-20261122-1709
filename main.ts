@@ -32,7 +32,12 @@ try {
 }
 
 if (typeof post !== 'object' || post === null || typeof post.url !== 'string') {
-  console.error('POST.json must be a JSON object with a string "url"');
+  console.error('POST.json must be a JSON object like {"url": "https://x.com/<handle>/status/<id>"} (an object with a string "url")');
+  process.exit(1);
+}
+
+if (!/^https:\/\/(x\.com|twitter\.com)\/[^/]+\/status\/\d+$/.test(post.url)) {
+  console.error(`POST.json "url" is not an X/Twitter status URL: ${post.url}`);
   process.exit(1);
 }
 
